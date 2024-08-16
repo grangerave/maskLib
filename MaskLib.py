@@ -597,7 +597,10 @@ class Structure:
         self.current_length = current_length #for keeping track of length
         self.last_length = current_length
         if defaults is None:
-            self.defaults = chip.defaults.copy()
+            if isinstance(chip, Chip):
+                self.defaults = chip.defaults.copy()
+            else:
+                self.defaults = dict()
         else:
             self.defaults = defaults.copy()
         
