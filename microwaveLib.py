@@ -800,6 +800,66 @@ def CPW_pad(chip,struct,l_pad=0,l_gap=0,padw=300,pads=50,l_lead=None,w=None,s=No
     if l_lead is None:
         l_lead = max(l_gap,pads)
     CPW_stub_short(chip,struct,length=l_lead,r_out=r_out,r_ins=r_ins,w=w,s=pads+padw/2-w/2,flipped=False,curve_ins=False,**kwargs)
+    
+def CPW_round_pad(chip,structure,pad_width=300,pad_length=None,align_outer=False,flush=True,w=None,s=None,bgcolor=None,**kwargs):
+    '''
+    Generates a rounded cpw pad by curving out to maximum width, 
+    extending some distance then curving back in with the same radius.
+    The end will be a flat section with width = cpw wire width (w).
+    If flush = True, the pad start will be flattened to match a cpw
+    If align_outer=True, we assume the pad dimensions (pad_length, pad_width)
+    determine are outer measurements.
+    '''
+    def struct():
+        if isinstance(structure,m.Structure):
+            return structure
+        elif isinstance(structure,tuple):
+            return m.Structure(chip,structure)
+        else:
+            return chip.structure(structure)
+    if w is None:
+        try:
+            w = struct().defaults['w']
+        except KeyError:
+            w=0
+            print('\x1b[33mw not defined in ',chip.chipID)
+    if s is None:
+        try:
+            s = struct().defaults['s']
+        except KeyError:
+            s=0
+            print('\x1b[33ms not defined in ',chip.chipID)
+    if align_outer:
+        #in case outer dimensions were specified
+        if pad_length is not None:
+            pad_length = pad_length - 2*s
+        pad_width = pad_width - 2*s
+    
+    r_inner = (pad_width - w)/2.0
+    if r_inner <0:
+        print('\x1b[33m pad inner radius negative in ',chip.chipID)
+    if pad_length is None:
+        straight_length = 0
+    else:
+        straight_length = pad_length - 2*r_inner
+        if straight_length < 0:
+            print('\x1b[33m pad length negative in ',chip.chipID)
+            
+    start_angle=90
+    if flush:
+        #start_angle=90.0-math.degrees(math.atan(s/(r_inner+s)))
+        start_angle=math.degrees(math.acos(s/(r_inner+s)))
+        CPW_taper(chip, struct(),length=s*math.sin(math.radians(start_angle)),s1=s-s*math.cos(math.radians(start_angle)),bgcolor=bgcolor,**kwargs)
+        struct().shiftPos(r_inner*math.sin(math.radians(start_angle)))
+    else:
+        struct().shiftPos(r_inner+s)
+    chip.add(CurveRect(struct().getPos((0,w/2+r_inner)),s,r_inner,angle=start_angle,ralign=const.BOTTOM,rotation=struct().direction,hflip=True,bgcolor=bgcolor,**kwargs))
+    chip.add(CurveRect(struct().getPos((0,-w/2-r_inner)),s,r_inner,angle=start_angle,ralign=const.BOTTOM,rotation=struct().direction,hflip=True,vflip=True,bgcolor=bgcolor,**kwargs))
+    if straight_length>0:
+        CPW_straight(chip,struct(),straight_length,w=w+2*r_inner,s=s,**kwargs)
+    chip.add(CurveRect(struct().getPos((0,w/2+r_inner)),s,r_inner,angle=90,ralign=const.BOTTOM,rotation=struct().direction,hflip=False,bgcolor=bgcolor,**kwargs))
+    chip.add(CurveRect(struct().getPos((0,-w/2-r_inner)),s,r_inner,angle=90,ralign=const.BOTTOM,rotation=struct().direction,hflip=False,vflip=True,bgcolor=bgcolor,**kwargs),structure=struct(),length=r_inner)
+    Strip_straight(chip,struct(),s,w,bgcolor=bgcolor,**kwargs)
 
 
 def CPW_launcher(chip,struct,l_taper=None,l_pad=0,l_gap=0,padw=300,pads=160,w=None,s=None,r_ins=0,r_out=0,bgcolor=None,**kwargs):
