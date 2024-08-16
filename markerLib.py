@@ -105,27 +105,26 @@ alphanum_dict = {
 '.': [[(4,0),(8,0),(8,4),(4,4)]]
 }
 
-def AlphaNumStr(chip, structure, string, size, centered=False, bgcolor=None, **kwargs):
+def AlphaNumStr(chip, structure, string, size, centered=False, **kwargs):
     """
     Draws block letters with size (x, y).
     """
-    def struct():
-        if isinstance(structure,m.Structure):
-            return structure
-        elif isinstance(structure,tuple):
-            return m.Structure(chip,structure)
-            #BUG - below struct().shiftPos is used so using pos instead doesn't work
-        else:
-            return chip.structure(structure)
-    if bgcolor is None:
-        bgcolor = chip.wafer.bg()
+    if isinstance(structure,m.Structure):
+        struct= structure
+    elif isinstance(structure,tuple):
+        struct= m.Structure(chip,structure)
+        #BUG - below struct().shiftPos is used so using pos instead doesn't work
+    else:
+        struct= chip.structure(structure)
 
-    if centered: struct().shiftPos(-size[0]*len(string)/2)
+
+    if centered: struct.shiftPos(-size[0]*len(string)/2)
     for letter in string:
         letter = letter.lower()
         assert letter in alphanum_dict.keys()
         scaled_size = (size[0] / 16., size[1] / 16.)
         for pts in alphanum_dict[letter]:
             scaled_pts = [(p[0]*scaled_size[0], p[1]*scaled_size[1]) for p in pts]
-            chip.add(SolidPline(insert=struct().getPos(), rotation=struct().direction, points=scaled_pts, **kwargs))
-        struct().shiftPos(size[0])
+            chip.add(SolidPline(insert=struct.getPos(), rotation=struct.direction, points=scaled_pts, **kwargs))
+        struct.shiftPos(size[0])
+    
