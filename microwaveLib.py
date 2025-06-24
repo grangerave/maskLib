@@ -972,7 +972,7 @@ def CPW_directTo(chip,from_structure,to_structure,to_flipped=True,w=None,s=None,
 
 #Various wiggles (meander) definitions 
 
-def wiggle_calc(chip,structure,length=None,nTurns=None,maxWidth=None,Width=None,start_bend = True,stop_bend=True,w=None,s=None,radius=None,debug=False,**kwargs):
+def wiggle_calc(chip,structure,h=None,length=None,nTurns=None,maxWidth=None,Width=None,start_bend = True,stop_bend=True,w=None,s=None,radius=None,debug=False,**kwargs):
     #figure out 
     def struct():
         if isinstance(structure,m.Structure):
@@ -1027,11 +1027,14 @@ def wiggle_calc(chip,structure,length=None,nTurns=None,maxWidth=None,Width=None,
                 nTurns = nTurns+1
                 h = (length - nTurns*2*math.pi*radius - (start_bend+stop_bend)*(math.pi/2-1)*radius)/(4*nTurns)
     else: #length is not contrained
-        h= maxWidth-radius-w/2-s
+        if h is None:
+            h= maxWidth-radius-w/2-s
+        else:
+            length = 4*nTurns*h + nTurns*2*math.pi*radius + (start_bend+stop_bend)*(math.pi/2-1)*radius
     h = max(h,radius)
     return {'nTurns':nTurns,'h':h,'length':length,'maxWidth':maxWidth,'Width':Width}
 
-def CPW_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,CCW=True,start_bend = True,stop_bend=True,w=None,s=None,radius=None,bgcolor=None,debug=False,**kwargs):
+def CPW_wiggles(chip,structure,h=None,length=None,nTurns=None,maxWidth=None,CCW=True,start_bend = True,stop_bend=True,w=None,s=None,radius=None,bgcolor=None,debug=False,**kwargs):
     def struct():
         if isinstance(structure,m.Structure):
             return structure
@@ -1046,7 +1049,7 @@ def CPW_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,CCW=True,st
             print('\x1b[33mradius not defined in ',chip.chipID,'!\x1b[0m')
             return
     
-    params = wiggle_calc(chip,structure,length,nTurns,maxWidth,None,start_bend,stop_bend,w,s,radius,**kwargs)
+    params = wiggle_calc(chip,structure,h,length,nTurns,maxWidth,None,start_bend,stop_bend,w,s,radius,**kwargs)
     [nTurns,h,length,maxWidth]=[params[key] for key in ['nTurns','h','length','maxWidth']]
     if (length is None) or (h is None) or (nTurns is None):
         print('not enough params specified for CPW_wiggles!')
@@ -1081,7 +1084,7 @@ def CPW_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,CCW=True,st
     else:
         CPW_straight(chip,structure,radius,w=w,s=s,bgcolor=bgcolor,**kwargs)
 
-def Strip_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,CCW=True,start_bend = True,stop_bend=True,w=None,radius=None,bgcolor=None,**kwargs):
+def Strip_wiggles(chip,structure,h=None,length=None,nTurns=None,maxWidth=None,CCW=True,start_bend = True,stop_bend=True,w=None,radius=None,bgcolor=None,**kwargs):
     def struct():
         if isinstance(structure,m.Structure):
             return structure
@@ -1096,7 +1099,7 @@ def Strip_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,CCW=True,
             print('\x1b[33mradius not defined in ',chip.chipID,'!\x1b[0m')
             return
     
-    params = wiggle_calc(chip,structure,length,nTurns,maxWidth,None,start_bend,stop_bend,w,0,radius,**kwargs)
+    params = wiggle_calc(chip,structure,h,length,nTurns,maxWidth,None,start_bend,stop_bend,w,0,radius,**kwargs)
     [nTurns,h,length,maxWidth]=[params[key] for key in ['nTurns','h','length','maxWidth']]
     if (h is None) or (nTurns is None):
         print('not enough params specified for Microstrip_wiggles!')
@@ -1129,7 +1132,7 @@ def Strip_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,CCW=True,
     else:
         Strip_straight(chip,structure,radius,w=w,bgcolor=bgcolor,**kwargs)
 
-def Inductor_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,Width=None,CCW=True,start_bend = True,stop_bend=True,pad_to_width=None,w=None,s=None,radius=None,bgcolor=None,**kwargs):
+def Inductor_wiggles(chip,structure,h=None,length=None,nTurns=None,maxWidth=None,Width=None,CCW=True,start_bend = True,stop_bend=True,pad_to_width=None,w=None,s=None,radius=None,bgcolor=None,**kwargs):
     def struct():
         if isinstance(structure,m.Structure):
             return structure
@@ -1158,7 +1161,7 @@ def Inductor_wiggles(chip,structure,length=None,nTurns=None,maxWidth=None,Width=
 
     if pad_to_width is None and Width is not None:
         pad_to_width = True
-    params = wiggle_calc(chip,structure,length,nTurns,maxWidth,Width,start_bend,stop_bend,w,0,radius,**kwargs)
+    params = wiggle_calc(chip,structure,h,length,nTurns,maxWidth,Width,start_bend,stop_bend,w,0,radius,**kwargs)
     [nTurns,h,length,maxWidth,Width]=[params[key] for key in ['nTurns','h','length','maxWidth','Width']]
     if (h is None) or (nTurns is None):
         print('not enough params specified for CPW_wiggles!')
