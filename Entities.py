@@ -369,6 +369,51 @@ class RoundRect(SolidPline):
         cy = self.vflip and -1 or 1
         
         return ((point[0]*cx,point[1]*cy))
+    
+class RoundRectInverse(RoundRect):
+    ''' Rectangle with a mix of rounded edges and inverse rounded edges. 
+        Consists of a closed polyline and multiple solids faces.
+        NOTE: does not cover negative width / height like rectangle()
+    '''
+    name = 'ROUNDRECT'
+
+    def __init__(self, insert, width, height, radius, roundCorners=[1,1,1,1],invertCorners=[0,1,1,0],invertHorizontal=True,
+                 halign=const.LEFT, valign=const.BOTTOM,
+                 hflip=False, vflip = False,ptDensity=120,**kwargs):
+
+        self.invertCorners=invertCorners
+        self.invertHorizontal=invertHorizontal
+        
+        RoundRect.__init__(self,insert, width, height, radius, roundCorners=roundCorners,
+                     halign=halign, valign=valign,
+                     hflip=hflip, vflip = vflip,ptDensity=ptDensity,**kwargs)
+        
+
+    def _calc_corners(self):
+        square_points = [(0., 0.), (self.width, 0.), (self.width, self.height),
+                  (0., self.height)]
+        align_vector=self._get_align_vector()
+        
+        points = [self._get_flipped_point(vadd((0.,self.height/2),align_vector))]
+        quadrants = [3,4,1,2]
+        if self.invertHorizontal:
+            iquadrants = [4,3,2,1]
+        else:
+            iquadrants = [2,1,4,3]
+            
+        
+        for i,sqpt in enumerate(square_points):
+            if self.roundCorners[i]:
+                if self.invertCorners[i]:
+                    quad = iquadrants[i]
+                else:
+                    quad = quadrants[i]
+                for p in cornerRound(sqpt, quad, self.radius,clockwise=self.invertCorners[i],ptDensity=self.ptDensity):
+                    points.append(self._get_flipped_point(vadd(align_vector,p)))
+            else:
+                points.append(self._get_flipped_point(vadd(align_vector,sqpt)))
+        
+        return points
 
 
 class InsideCurve(SubscriptAttributes):
