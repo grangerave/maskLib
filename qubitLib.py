@@ -13,7 +13,7 @@ from dxfwrite.vector2d import midpoint, vadd, vsub, distance
 
 #import maskLib.junctionLib as j
 from maskLib.Entities import RoundRect, InsideCurve, CurveRect
-from maskLib.microwaveLib import CPW_stub_open, CPW_straight, Strip_straight, Strip_bend, Strip_taper, CPW_launcher, CPW_taper, Strip_stub_open
+from maskLib.microwaveLib import CPW_stub_open, CPW_round_pad, CPW_straight, Strip_straight, Strip_bend, Strip_taper, CPW_launcher, CPW_taper, Strip_stub_open, Strip_stub_short, Strip_pad
 from maskLib.junctionLib import DolanJunction, JContact_tab, ManhattanJunction, JcalcTabDims, JContact_slot, JContact_tab, JSingleProbePad, JProbePads
 
 from maskLib.utilities import kwargStrip
@@ -534,8 +534,8 @@ def Xmon(
     struct().updatePos(s_start.getPos()) # initial starting position
     return s # center of xmon
 
-def XmonDolan(chip,structure,q_height,r_qubit=None,w_qubit=None,s_qubit=None,
-         jsep=None,secondlayer='XOR',taperw=50,leadw=8,**kwargs):
+def XmonGeneral(chip,structure,q_height,r_qubit=None,w_qubit=None,s_qubit=None,
+         jsep=None,secondlayer='XOR',taperw=50,leadw=8,junction_method=None,**kwargs):
     def struct():
         if isinstance(structure,m.Structure):
             return structure
@@ -603,9 +603,10 @@ def XmonDolan(chip,structure,q_height,r_qubit=None,w_qubit=None,s_qubit=None,
     JContact_slot(chip,struct(),tabw=0.2,tabl=0.2,r_out=0.5,taboffs=-0.05,r_ins=0.5,gapw=0.8,ptDensity=20,layer=secondlayer,hflip=False)
     Strip_straight(chip, struct(), s_qubit/2-jsep/2-tablength, w=2*tabhwidth,layer=secondlayer)
     struct().shiftPos(-s_qubit/2)
-    dolan_junction_teardrop(chip,Structure(chip,start=struct().start,direction=chip.wafer.JANGLES[0],defaults=struct().defaults),jsep=jsep,leadw=leadw,**kwargs)
+    if junction_method is not None:
+        junction_method(chip,m.Structure(chip,start=struct().start,direction=chip.wafer.JANGLES[0],defaults=struct().defaults),jsep=jsep,leadw=leadw,**kwargs)
     
-def CloverQubit(chip,structure,jsep=None,w_qubit=None,s_qubit=None,w_bridge=None,r_bridge=None,w_taper=6,l_taper=None,r_taper=None,ralign=const.BOTTOM,stem_l=None,q_sep=6,bgcolor=None,debug=False,**kwargs):
+def CloverQubit(chip,structure,jsep=None,w_qubit=None,s_qubit=None,w_bridge=None,r_bridge=None,w_taper=6,l_taper=None,r_taper=None,ralign=const.BOTTOM,stem_l=None,q_sep=6,bgcolor=None,debug=False,junction_method=None,**kwargs):
     '''
     Draws a resonator shaped like a 4leaf clover. 
     jsep: inductor length (jsep)
@@ -719,4 +720,7 @@ def CloverQubit(chip,structure,jsep=None,w_qubit=None,s_qubit=None,w_bridge=None
     JContact_tab(chip,s_l,tabw=0.2,tabl=0.2,r_out=0.5,taboffs=0.0,r_ins=0.5,stemw=0.8,steml=0,ptDensity=20)
     JContact_tab(chip,s_r,tabw=0.2,tabl=0.2,r_out=0.5,taboffs=0.0,r_ins=0.5,stemw=0.8,steml=0,ptDensity=20)
     
-    dolan_junction_teardrop(chip,Structure(chip,start=j_pos,direction=chip.wafer.JANGLES[0],defaults=struct().defaults),jsep=jsep,**kwargs)
+    if junction_method is not None:
+        junction_method(chip,m.Structure(chip,start=j_pos,direction=chip.wafer.JANGLES[0],defaults=struct().defaults),jsep=jsep,**kwargs)
+    
+    
