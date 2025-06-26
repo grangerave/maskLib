@@ -533,3 +533,190 @@ def Xmon(
 
     struct().updatePos(s_start.getPos()) # initial starting position
     return s # center of xmon
+
+def XmonDolan(chip,structure,q_height,r_qubit=None,w_qubit=None,s_qubit=None,
+         jsep=None,secondlayer='XOR',taperw=50,leadw=8,**kwargs):
+    def struct():
+        if isinstance(structure,m.Structure):
+            return structure
+        elif isinstance(structure,tuple):
+            return m.Structure(chip,structure)
+        else:
+            return chip.structure(structure)
+    if w_qubit is None:
+        try:
+            w_qubit = struct().defaults['w']
+        except KeyError:
+            print('\x1b[33ms not defined in ',chip.chipID,'!\x1b[0m')
+    if s_qubit is None:
+        try:
+            s_qubit = struct().defaults['s']
+        except KeyError:
+            print('\x1b[33ms not defined in ',chip.chipID,'!\x1b[0m')
+    if r_qubit is None:
+        try:
+            r_qubit = struct().defaults['r_ins']
+        except KeyError:
+            print('\x1b[33mr_ins not defined in ',chip.chipID,'!\x1b[0m')
+            r_qubit=0
+    if jsep is None:
+        jsep = s_qubit/2
+        
+    #since length is the length of each arm,
+    #define q_height as length from end to end of qubit ground plane slot
+    #q_height=length*2+s_qubit*2
+    length = q_height/2 - s_qubit
+        
+    chip.add(RoundRect(struct().start,q_height, w_qubit+2*s_qubit, r_qubit+s_qubit,rotation=struct().direction,valign=const.MIDDLE),struct(),q_height)
+    #left and right arms
+    sr=struct().cloneAlongLast((q_height/2,w_qubit/2+s_qubit),newDirection=90)
+    sl=struct().cloneAlongLast((q_height/2,-w_qubit/2-s_qubit),newDirection=-90)
+    
+    Strip_stub_short(chip,sr,r_ins=r_qubit,w=w_qubit+2*s_qubit,flipped=True)
+    Strip_stub_short(chip,sl,r_ins=r_qubit,w=w_qubit+2*s_qubit,flipped=True)
+    chip.add(RoundRect(sr.start,q_height/2-w_qubit/2-s_qubit, w_qubit+2*s_qubit, r_qubit+s_qubit,roundCorners=[0,1,1,0],rotation=sr.direction,valign=const.MIDDLE))
+    chip.add(RoundRect(sl.start,q_height/2-w_qubit/2-s_qubit, w_qubit+2*s_qubit, r_qubit+s_qubit,roundCorners=[0,1,1,0],rotation=sl.direction,valign=const.MIDDLE))
+    sr.shiftPos(-s_qubit)
+    sl.shiftPos(-s_qubit)
+    #second layer
+    Strip_stub_short(chip,sr,r_ins=r_qubit+s_qubit,w=w_qubit,flipped=True,layer=secondlayer)
+    Strip_stub_short(chip,sl,r_ins=r_qubit+s_qubit,w=w_qubit,flipped=True,layer=secondlayer)
+    chip.add(RoundRect(sr.start,q_height/2-w_qubit/2-s_qubit, w_qubit, r_qubit,roundCorners=[0,1,1,0],rotation=sr.direction,valign=const.MIDDLE,layer=secondlayer))
+    chip.add(RoundRect(sl.start,q_height/2-w_qubit/2-s_qubit, w_qubit, r_qubit,roundCorners=[0,1,1,0],rotation=sl.direction,valign=const.MIDDLE,layer=secondlayer))
+    
+    
+    struct().shiftPos(-q_height+s_qubit)
+    Strip_pad(chip, struct(), q_height-2*s_qubit, w=w_qubit, r_out=r_qubit,layer=secondlayer)
+    
+    tablength,tabhwidth = JcalcTabDims(chip,struct().start,tabw=0.2,tabl=0.2,r_out=0.5,taboffs=-0.05,r_ins=0.5,gapw=0.8,ptDensity=20) 
+    
+    #Strip_taper(chip,struct(),s_qubit/2-jsep/2,w0=taperw,w1=leadw,layer=secondlayer)
+    Strip_straight(chip, struct(), s_qubit/2-jsep/2-tablength, w=2*tabhwidth,layer=secondlayer)
+    JContact_slot(chip,struct(),tabw=0.2,tabl=0.2,r_out=0.5,taboffs=-0.05,r_ins=0.5,gapw=0.8,ptDensity=20,layer=secondlayer,hflip=True)
+    struct().shiftPos(-(s_qubit/2-jsep/2))
+    CPW_taper(chip,struct(),s_qubit/2-jsep/2,w0=2*tabhwidth,w1=2*tabhwidth,s0=taperw/2-tabhwidth,s1=max(leadw/2-tabhwidth,0.001),layer=secondlayer)
+    
+    struct().shiftPos(jsep)
+    #Strip_taper(chip,struct(),s_qubit/2-jsep/2,w0=leadw,w1=taperw,layer=secondlayer)
+    CPW_taper(chip,struct(),s_qubit/2-jsep/2,w1=2*tabhwidth,w0=2*tabhwidth,s1=taperw/2-tabhwidth,s0=max(leadw/2-tabhwidth,0.001),layer=secondlayer)
+    struct().shiftPos(-(s_qubit/2-jsep/2))
+    JContact_slot(chip,struct(),tabw=0.2,tabl=0.2,r_out=0.5,taboffs=-0.05,r_ins=0.5,gapw=0.8,ptDensity=20,layer=secondlayer,hflip=False)
+    Strip_straight(chip, struct(), s_qubit/2-jsep/2-tablength, w=2*tabhwidth,layer=secondlayer)
+    struct().shiftPos(-s_qubit/2)
+    dolan_junction_teardrop(chip,Structure(chip,start=struct().start,direction=chip.wafer.JANGLES[0],defaults=struct().defaults),jsep=jsep,leadw=leadw,**kwargs)
+    
+def CloverQubit(chip,structure,jsep=None,w_qubit=None,s_qubit=None,w_bridge=None,r_bridge=None,w_taper=6,l_taper=None,r_taper=None,ralign=const.BOTTOM,stem_l=None,q_sep=6,bgcolor=None,debug=False,**kwargs):
+    '''
+    Draws a resonator shaped like a 4leaf clover. 
+    jsep: inductor length (jsep)
+    w_qubit: equivalent to the fillet radius of inner metal
+    s_qubit: gap to ground
+    w_bridge: overrides overall width of inductor bridge (must satisfy 2*r_bridge+w_taper <= w_bridge)
+    r_bridge: overrides flare-out radius of inductor bridge (must satisfy 2*r_bridge + 2*l_taper+jsep <= s_qubit)
+    w_taper: width of wide section of inductor
+    l_taper: set to a length to override inductor-bridge contact rounding with a taper function (must satisfy 2*l_taper+jsep <= s_qubit)
+    r_taper: overrides the inductor-bridge contact rounding radius (must satisfy 2*r_taper+w_ind <= w_taper && 2*r_taper+jsep <= s_qubit)
+    '''
+    def struct():
+        if isinstance(structure,m.Structure):
+            return structure
+        elif isinstance(structure,tuple):
+            return m.Structure(chip,structure)
+        else:
+            return chip.structure(structure)
+    if bgcolor is None:
+        bgcolor = chip.wafer.bg()
+    if w_qubit is None:
+        try:
+            w_qubit = struct().defaults['w']
+        except KeyError:
+            print('\x1b[33mw not defined in ',chip.chipID,'!\x1b[0m')
+    if s_qubit is None:
+        try:
+            s_qubit = struct().defaults['s']
+        except KeyError:
+            print('\x1b[33ms not defined in ',chip.chipID,'!\x1b[0m')
+    if jsep is None:
+        jsep = s_qubit/2
+    #assign manual inputs but override dumb inputs       
+    jsep = min(s_qubit,jsep)
+    if l_taper is not None and 2*l_taper + jsep <= s_qubit:
+        r_taper = 0 #don't round the contact
+    else:
+        #set l_taper manually, and round the contact
+        l_taper = max(min((s_qubit-jsep)/2.0,w_taper/2),0)#default to w_taper/2
+        if r_taper is None: r_taper = l_taper #default to l_taper
+        r_taper = max(min(r_taper,l_taper,(w_taper)/2.0),0)
+    
+    if w_bridge is not None and w_bridge >= w_taper:
+        #w_bridge specified, constrain r_bridge
+        if r_bridge is None: r_bridge = (s_qubit-jsep-2*l_taper)/2.0 #default to max space
+        r_bridge = max(min(r_bridge,(s_qubit-jsep-2*l_taper)/2.0,(w_bridge-w_taper)/2.0),0)
+    else:
+        #w_bridge not specified.
+        r_bridge = max((s_qubit-jsep-2*l_taper)/2.0,0)
+        w_bridge = w_taper+2*r_bridge
+    
+    #internal variables
+    r_0 = w_qubit/2 + s_qubit/2
+    
+    
+    if isinstance(ralign,int):
+        #by default the radius is defined as the inner radius
+        if ralign == const.MIDDLE:
+            dr = 0
+        elif ralign == const.TOP: #anchored at TOP
+            dr = -s_qubit/2.
+        else:  # const.BOTTOM (anchored at BOTTOM)
+            dr = s_qubit/2.
+    else:
+        dr = s_qubit*(ralign-0.5)
+    
+    #effective radii 
+    r_ins=r_0-dr
+    r_out=r_0+dr
+    
+    #print(2*(2*r_0 - r_out + w_bridge)-2*q_sep-2*10,2*r_ins+w_bridge,r_0,r_out,r_ins)
+    
+    #coupler pad
+    CPW_round_pad(chip, struct(), pad_length=stem_l,pad_width=2*(r_ins-s_qubit/2)+w_bridge-2*q_sep,align_outer=True)
+    struct().shiftPos(q_sep+s_qubit/2)
+    #define sub-structures
+    s_r = struct().cloneAlong((0,w_bridge/2),newDirection=90,defaults={'w':s_qubit})
+    s_l = struct().cloneAlong((0,-w_bridge/2),newDirection=-90,defaults={'w':s_qubit})
+    
+    #debug
+    if debug:
+        chip.add(dxf.rectangle(struct().getPos(distance=dr), 2*r_0, 2*r_0+w_bridge,valign=const.MIDDLE,rotation=struct().direction,layer='FRAME'))
+    
+    #draw center, left right arms
+    chip.add(dxf.rectangle(struct().start, s_qubit, w_bridge,valign=const.MIDDLE,halign=const.CENTER,rotation=struct().direction,bgcolor=bgcolor,**kwargStrip(kwargs)))
+    
+    Strip_bend(chip, s_r,CCW=False,radius=r_ins,bgcolor=bgcolor,**kwargStrip(kwargs))
+    Strip_bend(chip, s_r,CCW=True,angle=270,radius=r_out,bgcolor=bgcolor,**kwargStrip(kwargs))
+    Strip_bend(chip, s_r,CCW=False,angle=180,radius=r_ins,bgcolor=bgcolor,**kwargStrip(kwargs))
+    Strip_bend(chip, s_r,CCW=True,angle=270,radius=r_out,bgcolor=bgcolor,**kwargStrip(kwargs))
+    Strip_bend(chip, s_r,CCW=False,angle=90,radius=r_ins,bgcolor=bgcolor,**kwargStrip(kwargs))
+    
+    Strip_bend(chip, s_l,CCW=True,radius=r_ins,bgcolor=bgcolor,**kwargStrip(kwargs))
+    Strip_bend(chip, s_l,CCW=False,angle=270,radius=r_out,bgcolor=bgcolor,**kwargStrip(kwargs))
+    Strip_bend(chip, s_l,CCW=True,angle=180,radius=r_ins,bgcolor=bgcolor,**kwargStrip(kwargs))
+    Strip_bend(chip, s_l,CCW=False,angle=270,radius=r_out,bgcolor=bgcolor,**kwargStrip(kwargs))
+    Strip_bend(chip, s_l,CCW=True,angle=90,radius=r_ins,bgcolor=bgcolor,**kwargStrip(kwargs))
+    
+    if r_bridge >0:
+        Strip_taper(chip,s_l,r_bridge,w1=jsep)
+        Strip_taper(chip,s_r,r_bridge,w1=jsep)
+        #Strip_stub_open(chip,s_r,r_out=r_bridge)
+        #Strip_stub_open(chip,s_l,r_out=r_bridge)
+
+    Strip_straight(chip,s_r,(w_taper)/2.,w=jsep,**kwargs)
+    Strip_straight(chip,s_l,(w_taper)/2.,w=jsep,**kwargs)
+    
+    j_pos = s_l.start
+    s_l.translatePos((0,-jsep/2),newDir=90)
+    s_r.translatePos((0,-jsep/2),newDir=-90)
+    JContact_tab(chip,s_l,tabw=0.2,tabl=0.2,r_out=0.5,taboffs=0.0,r_ins=0.5,stemw=0.8,steml=0,ptDensity=20)
+    JContact_tab(chip,s_r,tabw=0.2,tabl=0.2,r_out=0.5,taboffs=0.0,r_ins=0.5,stemw=0.8,steml=0,ptDensity=20)
+    
+    dolan_junction_teardrop(chip,Structure(chip,start=j_pos,direction=chip.wafer.JANGLES[0],defaults=struct().defaults),jsep=jsep,**kwargs)
