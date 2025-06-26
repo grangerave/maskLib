@@ -1372,7 +1372,7 @@ def CPW_tee_stub(chip,structure,stub_length,stub_w,tee_r=0,outer_width=None,w=No
     CPW_stub_round(chip, s_right,**kwargs)
 
     if not pincer_flipped:
-        s_start.shiftPos(stub_w+2*s)
+        s_start.shiftPos(stub_w+2*s+tee_r)
         struct().updatePos(s_start.getPos())
     else: 
         struct().updatePos(s_start.getPos(),angle=180)
