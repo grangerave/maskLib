@@ -13,7 +13,7 @@ from dxfwrite.vector2d import midpoint, vadd, vsub, distance
 
 #import maskLib.junctionLib as j
 from maskLib.Entities import RoundRect, InsideCurve, CurveRect
-from maskLib.microwaveLib import CPW_stub_open, CPW_round_pad, CPW_straight, Strip_straight, Strip_bend, Strip_taper, CPW_launcher, CPW_taper, Strip_stub_open, Strip_stub_short, Strip_pad
+from maskLib.microwaveLib import CPW_stub_open, CPW_round_pad, CPW_straight, Strip_straight, Strip_bend, Strip_taper, CPW_launcher, CPW_taper, Strip_stub_open, Strip_stub_short, Strip_pad, CPW_tee_stub
 from maskLib.junctionLib import DolanJunction, JContact_tab, ManhattanJunction, JcalcTabDims, JContact_slot, JContact_tab, JSingleProbePad, JProbePads
 
 from maskLib.utilities import kwargStrip
@@ -249,6 +249,162 @@ def Hamburgermon(chip,pos,rotation=0,
     ManhattanJunction(chip, centerPos, rotation=struct().direction,separation=qbunseparation, **kwargs)
     
     return centerPos,struct().direction
+
+def SandvichQubit(chip,structure,
+                  q_width,q_bun_sep,#qubit pads
+                  q_sep,q_overlap,stub_w=35,r_pincer_tee=5,#coupler
+                  l_antenna=250,r_antenna=30,w_antenna=2,#antenna (olive)
+                  r_qubit=None,w_qubit=None,s_qubit=None,
+                  j_tabw=12,j_tab=True,jsep=None,XLAYER='XOR',junction_method=None,j_offset=0,debug=False,**kwargs):
+    def struct():
+        if isinstance(structure,m.Structure):
+            return structure
+        elif isinstance(structure,tuple):
+            return m.Structure(chip,structure)
+        else:
+            return chip.structure(structure)
+    #get layers from wafer
+    if XLAYER is None:
+        try:
+            XLAYER = chip.wafer.XLAYER
+        except AttributeError:
+            chip.wafer.setupXORlayer()
+            XLAYER = chip.wafer.XLAYER
+    if w_qubit is None:
+        try:
+            w_qubit = struct().defaults['w']
+        except KeyError:
+            print('\x1b[33mw not defined in ',chip.chipID,'!\x1b[0m')
+    if s_qubit is None:
+        try:
+            s_qubit = struct().defaults['s']
+        except KeyError:
+            print('\x1b[33ms not defined in ',chip.chipID,'!\x1b[0m')
+    if jsep is None:
+        jsep = s_qubit/2
+    #assign manual inputs but override dumb inputs       
+    jsep = min(s_qubit,jsep)
+    
+    #internal variables
+    r_qubit = w_qubit / 2
+    
+    s1 = struct()
+    
+    #qubit coupler
+    CPW_tee_stub(chip, s1, q_overlap, stub_w, tee_r = r_pincer_tee)
+    s1.shiftPos(q_sep)
+    s2 = s1.cloneAlong(distance=s_qubit)
+    Strip_stub_open(chip, s1,length=w_qubit/2+s_qubit,flipped=True,w=q_width+2*s_qubit,r_out = r_qubit+s_qubit)
+    Strip_straight(chip, s1,w_qubit*1.5+q_bun_sep+l_antenna,w=q_width+2*s_qubit)
+    Strip_stub_open(chip, s1, length=q_width/2+s_qubit,w=q_width+2*s_qubit,r_out = q_width/2+s_qubit)
+    chip.add(RoundRect(s2.start,w_qubit,q_width,r_qubit,halign=const.LEFT,valign=const.MIDDLE,rotation=struct().direction,layer=XLAYER,bgcolor=chip.bg(XLAYER),**kwargs),structure=s2,length=w_qubit)
+    s2.shiftPos(q_bun_sep)
+    chip.add(RoundRect(s2.start,w_qubit,q_width,r_qubit,halign=const.LEFT,valign=const.MIDDLE,rotation=struct().direction,layer=XLAYER,bgcolor=chip.bg(XLAYER),**kwargs),structure=s2,length=w_qubit)
+    chip.add(InsideCurve(s2.getPos((0,-w_antenna/2)),radius=l_antenna/2,hflip=True,rotation=struct().direction,layer=XLAYER,bgcolor=chip.bg(XLAYER)))
+    chip.add(InsideCurve(s2.getPos((0,w_antenna/2)),radius=l_antenna/2,hflip=True,vflip=True,rotation=struct().direction,layer=XLAYER,bgcolor=chip.bg(XLAYER)))
+    #inside curves
+    Strip_straight(chip,s2, l_antenna-r_antenna,w=w_antenna,layer=XLAYER)
+    chip.add(dxf.circle(radius=r_antenna,center=s2.getPos(distance=r_antenna),bgcolor=chip.bg(XLAYER),layer=XLAYER))
+    #shift back to junction position
+    s1.shiftPos(-q_width/2-s_qubit-l_antenna-w_qubit-q_bun_sep/2)
+    j_pos = s1.getPos((0,j_offset))
+    s_l = s1.cloneAlong((-q_bun_sep/2,j_offset))
+    s_r = s1.cloneAlong((q_bun_sep/2,j_offset),newDirection=180)
+    if j_tab:
+        Strip_taper(chip, s_l, length=(q_bun_sep-jsep)/2,w0=j_tabw+(q_bun_sep-jsep)/2,w1=j_tabw,layer=XLAYER)
+        Strip_taper(chip, s_r, length=(q_bun_sep-jsep)/2,w0=j_tabw+(q_bun_sep-jsep)/2,w1=j_tabw,layer=XLAYER)
+        JContact_tab(chip,s_l,tabw=0.2,tabl=0.2,r_out=0.5,taboffs=0.0,r_ins=0.5,stemw=0.8,steml=0,ptDensity=20,layer=XLAYER)
+        JContact_tab(chip,s_r,tabw=0.2,tabl=0.2,r_out=0.5,taboffs=0.0,r_ins=0.5,stemw=0.8,steml=0,ptDensity=20,layer=XLAYER)
+    else:
+        tablength,tabhwidth = JcalcTabDims(chip,struct().start,tabw=0.5,tabl=0.2,r_out=0.5,taboffs=-0.05,r_ins=0.5,gapw=0.8,ptDensity=20)
+        CPW_taper(chip, s_l, length=(q_bun_sep-jsep)/2,w0=2*tabhwidth,s0=(q_bun_sep-jsep)/2+(j_tabw-2*tabhwidth)/2,s1=(j_tabw-2*tabhwidth)/2,w1=2*tabhwidth,layer=XLAYER)
+        CPW_taper(chip, s_r, length=(q_bun_sep-jsep)/2,w0=2*tabhwidth,s0=(q_bun_sep-jsep)/2+(j_tabw-2*tabhwidth)/2,s1=(j_tabw-2*tabhwidth)/2,w1=2*tabhwidth,layer=XLAYER)
+        s_l.shiftPos(-(q_bun_sep-jsep)/2)
+        s_r.shiftPos(-(q_bun_sep-jsep)/2)
+        Strip_straight(chip, s_l, length=(q_bun_sep-jsep)/2-tablength, w=2*tabhwidth,layer=XLAYER)
+        Strip_straight(chip, s_r, length=(q_bun_sep-jsep)/2-tablength, w=2*tabhwidth,layer=XLAYER)
+        JContact_slot(chip,s_l,tabw=0.5,tabl=0.2,r_out=0.5,taboffs=-0.05,r_ins=0.5,gapw=0.8,ptDensity=20,layer=XLAYER,hflip=True)
+        JContact_slot(chip,s_r,tabw=0.5,tabl=0.2,r_out=0.5,taboffs=-0.05,r_ins=0.5,gapw=0.8,ptDensity=20,layer=XLAYER,hflip=True)
+        
+    
+    if junction_method is not None:
+        junction_method(chip,m.Structure(chip,start=j_pos,direction=chip.wafer.JANGLES[0],defaults=struct().defaults),jsep=jsep,**kwargs)
+    
+
+def HamburgerQubit(chip,structure,
+                  q_width,q_bun_sep,#qubit pads
+                  q_sep,q_overlap,stub_w=35,r_pincer_tee=5,#coupler
+                  r_qubit=None,w_qubit=None,s_qubit=None,
+                  j_tabw=12,j_tab=True,jsep=None,j_offset=0,XLAYER='XOR',junction_method=None,debug=True,**kwargs):
+    def struct():
+        if isinstance(structure,m.Structure):
+            return structure
+        elif isinstance(structure,tuple):
+            return m.Structure(chip,structure)
+        else:
+            return chip.structure(structure)
+    #get layers from wafer
+    if XLAYER is None:
+        try:
+            XLAYER = chip.wafer.XLAYER
+        except AttributeError:
+            chip.wafer.setupXORlayer()
+            XLAYER = chip.wafer.XLAYER
+    if w_qubit is None:
+        try:
+            w_qubit = struct().defaults['w']
+        except KeyError:
+            print('\x1b[33mw not defined in ',chip.chipID,'!\x1b[0m')
+    if s_qubit is None:
+        try:
+            s_qubit = struct().defaults['s']
+        except KeyError:
+            print('\x1b[33ms not defined in ',chip.chipID,'!\x1b[0m')
+    if jsep is None:
+        jsep = s_qubit/2
+    #assign manual inputs but override dumb inputs       
+    jsep = min(s_qubit,jsep)
+    
+    #internal variables
+    r_qubit = w_qubit / 2
+    
+    s1 = struct()
+    
+    #qubit coupler
+    CPW_tee_stub(chip, s1, q_overlap, stub_w, tee_r = r_pincer_tee)
+    s1.shiftPos(q_sep)
+    s2 = s1.cloneAlong(distance=s_qubit)
+    Strip_stub_open(chip, s1,length=w_qubit/2+s_qubit,flipped=True,w=q_width+2*s_qubit,r_out = r_qubit+s_qubit)
+    Strip_straight(chip, s1,w_qubit+q_bun_sep,w=q_width+2*s_qubit)
+    Strip_stub_open(chip, s1, length=r_qubit+s_qubit,w=q_width+2*s_qubit,r_out = r_qubit+s_qubit)
+    chip.add(RoundRect(s2.start,w_qubit,q_width,r_qubit,halign=const.LEFT,valign=const.MIDDLE,rotation=struct().direction,layer=XLAYER,bgcolor=chip.bg(XLAYER),**kwargs),structure=s2,length=w_qubit)
+    s2.shiftPos(q_bun_sep)
+    sj = s2.cloneAlongLast(distance=q_bun_sep/2)
+    chip.add(RoundRect(s2.start,w_qubit,q_width,r_qubit,halign=const.LEFT,valign=const.MIDDLE,rotation=struct().direction,layer=XLAYER,bgcolor=chip.bg(XLAYER),**kwargs),structure=s2,length=w_qubit)
+    
+    #shift back to junction position
+    s1.shiftPos(-s_qubit-w_qubit-q_bun_sep/2)
+    j_pos = s1.getPos((0,j_offset))
+    s_l = s1.cloneAlong((-q_bun_sep/2,j_offset))
+    s_r = s1.cloneAlong((q_bun_sep/2,j_offset),newDirection=180)
+    if j_tab:
+        Strip_taper(chip, s_l, length=(q_bun_sep-jsep)/2,w0=j_tabw+(q_bun_sep-jsep)/2,w1=j_tabw,layer=XLAYER)
+        Strip_taper(chip, s_r, length=(q_bun_sep-jsep)/2,w0=j_tabw+(q_bun_sep-jsep)/2,w1=j_tabw,layer=XLAYER)
+        JContact_tab(chip,s_l,tabw=0.2,tabl=0.2,r_out=0.5,taboffs=0.0,r_ins=0.5,stemw=0.8,steml=0,ptDensity=20,layer=XLAYER)
+        JContact_tab(chip,s_r,tabw=0.2,tabl=0.2,r_out=0.5,taboffs=0.0,r_ins=0.5,stemw=0.8,steml=0,ptDensity=20,layer=XLAYER)
+    else:
+        tablength,tabhwidth = JcalcTabDims(chip,struct().start,tabw=0.5,tabl=0.2,r_out=0.5,taboffs=-0.05,r_ins=0.5,gapw=0.8,ptDensity=20)
+        CPW_taper(chip, s_l, length=(q_bun_sep-jsep)/2,w0=2*tabhwidth,s0=(q_bun_sep-jsep)/2+(j_tabw-2*tabhwidth)/2,s1=(j_tabw-2*tabhwidth)/2,w1=2*tabhwidth,layer=XLAYER)
+        CPW_taper(chip, s_r, length=(q_bun_sep-jsep)/2,w0=2*tabhwidth,s0=(q_bun_sep-jsep)/2+(j_tabw-2*tabhwidth)/2,s1=(j_tabw-2*tabhwidth)/2,w1=2*tabhwidth,layer=XLAYER)
+        s_l.shiftPos(-(q_bun_sep-jsep)/2)
+        s_r.shiftPos(-(q_bun_sep-jsep)/2)
+        Strip_straight(chip, s_l, length=(q_bun_sep-jsep)/2-tablength, w=2*tabhwidth,layer=XLAYER)
+        Strip_straight(chip, s_r, length=(q_bun_sep-jsep)/2-tablength, w=2*tabhwidth,layer=XLAYER)
+        JContact_slot(chip,s_l,tabw=0.5,tabl=0.2,r_out=0.5,taboffs=-0.05,r_ins=0.5,gapw=0.8,ptDensity=20,layer=XLAYER,hflip=True)
+        JContact_slot(chip,s_r,tabw=0.5,tabl=0.2,r_out=0.5,taboffs=-0.05,r_ins=0.5,gapw=0.8,ptDensity=20,layer=XLAYER,hflip=True)
+        
+    if junction_method is not None:
+        junction_method(chip,m.Structure(chip,start=j_pos,direction=chip.wafer.JANGLES[0],defaults=struct().defaults),jsep=jsep,**kwargs)
     
 def Elephantmon(
     chip, structure, rotation=0, totalw=0, totall=0,
@@ -608,7 +764,7 @@ def XmonGeneral(chip,structure,q_height,r_qubit=None,w_qubit=None,s_qubit=None,
     
 def CloverQubit(chip,structure,jsep=None,w_qubit=None,s_qubit=None,w_bridge=None,r_bridge=None,w_taper=6,l_taper=None,r_taper=None,ralign=const.BOTTOM,stem_l=None,q_sep=6,bgcolor=None,debug=False,junction_method=None,**kwargs):
     '''
-    Draws a resonator shaped like a 4leaf clover. 
+    Draws a qubit shaped like a 4leaf clover. 
     jsep: inductor length (jsep)
     w_qubit: equivalent to the fillet radius of inner metal
     s_qubit: gap to ground
