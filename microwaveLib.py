@@ -862,10 +862,10 @@ def CPW_round_pad(chip,structure,pad_width=300,pad_length=None,align_outer=False
     Strip_straight(chip,struct(),s,w,bgcolor=bgcolor,**kwargs)
 
 
-def CPW_launcher(chip,struct,l_taper=None,l_pad=0,l_gap=0,padw=300,pads=160,w=None,s=None,r_ins=0,r_out=0,bgcolor=None,**kwargs):
+def CPW_launcher(chip,struct,l_taper=None,l_pad=0,l_gap=0,padw=300,pads=160,cpw_w=None,cpw_s=None,r_ins=0,r_out=0,bgcolor=None,**kwargs):
     CPW_stub_open(chip,struct,length=max(l_gap,pads),r_out=r_out,r_ins=r_ins,w=padw,s=pads,flipped=True,**kwargs)
     CPW_straight(chip,struct,max(l_pad,padw),w=padw,s=pads,**kwargs)
-    CPW_taper(chip,struct,length=l_taper,w0=padw,s0=pads,**kwargs)
+    CPW_taper(chip,struct,length=l_taper,w0=padw,s0=pads,w1=cpw_w,s1=cpw_s,**kwargs)
 
 def CPW_taper_cap(chip,structure,gap,width,l_straight=0,l_taper=None,s1=None,**kwargs):
     def struct():
