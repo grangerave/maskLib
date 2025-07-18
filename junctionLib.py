@@ -14,8 +14,8 @@ from dxfwrite import const
 from dxfwrite.vector2d import vadd
 from dxfwrite.algebra import rotate_2d
 
-from maskLib.Entities import SolidPline, CurveRect, RoundRect, InsideCurve
-from maskLib.microwaveLib import Strip_straight, Strip_taper, Strip_pad
+from maskLib.Entities import SolidPline, CurveRect, RoundRect, InsideCurve, MiterJoint
+from maskLib.microwaveLib import Strip_straight, Strip_taper, Strip_pad, Strip_stub_round, Strip_stub_open, CPW_taper, CPW_straight, CPW_stub_round
 
 from maskLib.utilities import curveAB, kwargStrip
 
@@ -1225,6 +1225,66 @@ def ManhattanJunction(chip,structure,rotation=0,separation=40,jpadw=20,jpadr=2,j
                    (jfingerl-jfingerex)*math.cos(rot)+leadw-jfingerw*math.sin(rot)/2),math.radians(struct().direction))
                 ],bgcolor=bgcolor,layer=JLAYER))
 
+def manhattan_squid_curvy(chip,structure,pad=7,jsep=20,leadw=13,palmw=2,palml=6,bridgew=0.7,fingerw=0.2,finger2w=0.25,fingerl=0.8,fingerextra=0.8,undercut=0.6,ULAYER=None,ptDensity=20):
+    def struct():
+        if isinstance(structure,m.Structure):
+            return structure
+        elif isinstance(structure,tuple):
+            return m.Structure(chip,structure)
+        else:
+            return chip.structure(structure)
+        
+    JLAYER = chip.wafer.JLAYER
+    if ULAYER is None:
+        ULAYER = chip.wafer.ULAYER
+    
+    r_out = leadw/2
+    struct().defaults['w']=pad
+    struct().defaults['r_out']=r_out
+    s1 = struct().cloneAlong(distance = -jsep/2-max(r_out,pad))
+    s2 = struct().cloneAlong(distance = jsep/2+max(r_out,pad),newDirection=180)
+    
+    
+    #pads
+    for sign,s in zip([-1,1],[s1,s2]):
+        CPW_stub_round(chip, s.cloneAlong(distance=-undercut), w=leadw,s=undercut,ptDensity=ptDensity+2,flipped=True,layer=ULAYER)
+        Strip_stub_open(chip, s, w=leadw,length=pad,r_out=r_out,flipped=True,layer=JLAYER,ptDensity=ptDensity)
+        #some math
+        r_miter = (palmw-math.sqrt(2)*leadw/2)/(math.sqrt(2)-2)
+        jsep_padding = jsep/2-(r_miter+leadw/2)/2-(fingerl+palml+palmw/2)/math.sqrt(2)#if this is negative, problem!
+        
+        CPW_straight(chip,s.cloneAlong(distance=-(pad-r_out)),pad-r_out+jsep_padding,w=leadw,s=undercut,layer=ULAYER)
+        if jsep_padding>0:
+            Strip_straight(chip, s, jsep_padding, w=leadw,layer=JLAYER)
+        
+        chip.add(MiterJoint(s.start,height=leadw/2,w1=palmw,valign=const.TOP,rotation=s.direction,layer=JLAYER,ptDensity=2*ptDensity))
+        chip.add(MiterJoint(s.start,height=leadw/2,w1=palmw,valign=const.TOP,vflip=True,rotation=s.direction,layer=JLAYER,ptDensity=2*ptDensity))
+        #undercut for joints
+        
+        chip.add(CurveRect(s.getPos((0,-leadw/2)),height=undercut,radius=r_miter,angle=45,ptDensity=2*ptDensity,valign=const.TOP,ralign=const.TOP,layer=ULAYER,rotation=s.direction))
+        chip.add(CurveRect(s.getPos((0,leadw/2)),height=undercut,radius=r_miter,angle=45,ptDensity=2*ptDensity,vflip=True,valign=const.TOP,ralign=const.TOP,layer=ULAYER,rotation=s.direction))
+        s_l = s.cloneAlong(distance=(leadw/2+r_miter)/math.sqrt(2),angle=sign*45,newDirection=sign*45)
+        s_r = s.cloneAlong(distance=(leadw/2+r_miter)/math.sqrt(2),angle=-sign*45,newDirection=-sign*45)
+        chip.add(CurveRect(s_l.getPos((0,-sign*palmw/2)),height=undercut,radius=r_miter,angle=45,ptDensity=2*ptDensity,hflip=True,vflip=sign<0,valign=const.TOP,ralign=const.TOP,layer=ULAYER,rotation=s_l.direction))
+        chip.add(CurveRect(s_r.getPos((0,sign*palmw/2)),height=undercut,radius=r_miter,angle=45,ptDensity=2*ptDensity,hflip=True,vflip=sign>0,valign=const.TOP,ralign=const.TOP,layer=ULAYER,rotation=s_r.direction))
+        #tapers
+        CPW_taper(chip,s_l.clone(),length=palml,w0=palmw,s0=undercut,s1=0,w1=fingerw,offset=(0,-sign*(palmw-fingerw)/2),layer=ULAYER)
+        CPW_taper(chip,s_r.clone(),length=palml,w0=palmw,s0=undercut,s1=0,w1=finger2w,offset=(0,sign*(palmw-finger2w)/2),layer=ULAYER)
+        Strip_taper(chip, s_l, w0=palmw,length=palml,w1=fingerw,offset=(0,-sign*(palmw-fingerw)/2),layer=JLAYER)
+        Strip_taper(chip, s_r, w0=palmw,length=palml,w1=finger2w,offset=(0,sign*(palmw-finger2w)/2),layer=JLAYER)
+        #jfingers
+        if sign > 0:
+            Strip_straight(chip, s_l, fingerl+fingerw+fingerextra, w=fingerw,layer=JLAYER)
+            Strip_straight(chip, s_r, fingerl+finger2w+fingerextra, w=finger2w,layer=JLAYER)
+        else:
+            Strip_straight(chip, s_l, fingerl, w=fingerw,layer=JLAYER)
+            Strip_straight(chip, s_r, fingerl, w=finger2w,layer=JLAYER)
+            s_l.shiftPos(fingerw)
+            s_r.shiftPos(finger2w)
+            Strip_straight(chip, s_l, fingerextra, w=fingerw,layer=JLAYER)
+            Strip_straight(chip, s_r, fingerextra, w=finger2w,layer=JLAYER)
+        Strip_straight(chip, s_l, undercut, w=2*fingerw,layer=ULAYER)
+        Strip_straight(chip, s_r, undercut, w=2*finger2w,layer=ULAYER)
 
 def DolanJunction(
     chip, structure, junctionl, jfingerw=0.5, rotation=0,
