@@ -266,8 +266,8 @@ class CurveRect(SolidPline):
             pts = [(0,self.rmin-self.r0),(self.rmax*math.sin(self.angle)-self.rmin,self.rmax*math.cos(self.angle)-self.r0+self.rmin)]
             pts = pts + [(self.rmax*math.sin(self.angle-(i+0.5)*dTheta)-self.rmin,self.rmax*math.cos(self.angle-(i+0.5)*dTheta)-self.r0) for i in range(self.segments)] + [(0,self.rmax - self.r0)]
         else:
-            pts = [(0,self.rmin-self.r0)]+[(self.rmin*math.sin((i+0.5)*dTheta),self.rmin*math.cos((i+0.5)*dTheta)-self.r0) for i in range(self.segments)]+[(self.rmin*math.sin(self.angle),self.rmin*math.cos(self.angle)-self.r0)]
-            pts = pts + [(self.rmax*math.sin(self.angle),self.rmax*math.cos(self.angle)-self.r0)] + [(self.rmax*math.sin(self.angle-(i+0.5)*dTheta),self.rmax*math.cos(self.angle-(i+0.5)*dTheta)-self.r0) for i in range(self.segments)] + [(0,self.rmax - self.r0)]
+            pts = [(0,self.rmin-self.r0)]+[(self.rmin*math.sin((i+1)*dTheta),self.rmin*math.cos((i+1)*dTheta)-self.r0) for i in range(self.segments-1)]+[(self.rmin*math.sin(self.angle),self.rmin*math.cos(self.angle)-self.r0)]
+            pts = pts + [(self.rmax*math.sin(self.angle),self.rmax*math.cos(self.angle)-self.r0)] + [(self.rmax*math.sin(self.angle-(i+1)*dTheta),self.rmax*math.cos(self.angle-(i+1)*dTheta)-self.r0) for i in range(self.segments-1)] + [(0,self.rmax - self.r0)]
         
         
         return [vsub(pt,align) for pt in pts]
@@ -298,6 +298,87 @@ class CurveRect(SolidPline):
     def __dxftags__(self):
         return self._build() 
 
+class MiterJoint(SolidPline):
+    ''' Curved joint shape consisting of a single Polyline and a number of background solids
+        Connects a 90 deg corner (dimensions of height) to a 45 degree flat side (dimensions w1)
+    '''
+    name = 'MITERJOINT'
+    
+    def __init__(self,insert,height,w1,roffset=0,ptDensity=60,rotation=0.,color=const.BYLAYER,bgcolor=None,layer='0',linetype=None,valign=const.BOTTOM,vflip=False,hflip=False, **kwargs):
+        self.insert = insert
+        self.rotation = math.radians(rotation)
+        self.color = color
+        self.bgcolor = bgcolor
+        self.layer = layer
+        self.linetype = linetype
+        
+        self.points = []
+        self.valign = valign
+        self.height = height
+        if w1 >= height*math.sqrt(2):
+            print('Warning: Miter radius too small! Use a triangle instead.')
+        self.w1 = min(w1,height*math.sqrt(2))
+        
+        angle = 45
+        self.angle = math.radians(angle)
+        self.segments = max(int(ptDensity*angle/360),1)
+        
+        self.vflip = vflip and -1 or 1
+        self.hflip = hflip and -1 or 1
+        
+        self.r0 = max((w1-math.sqrt(2)*height)/(math.sqrt(2)-2),0)
+
+    def _get_align_vector(self):
+
+        #note: vertical alignment is flipped from regular rectangle
+        if self.valign == const.MIDDLE:
+            dy = -self.height/2.
+        elif self.valign == const.TOP:
+            dy = -self.height
+        else:  # const.BOTTOM
+            dy = 0.
+
+        return (0, dy)
+    
+    def _build(self):
+        data = DXFList()
+        self.points = self._calc_points()
+        align_vector = self._get_align_vector()
+        self._transform_points(align_vector)
+        if self.color is not None:
+            data.append(self._build_polyline())
+        return data
+        
+    def _transform_points(self,align):
+        self.points = [vadd(self.insert,  # move to insert point
+                            rotate_2d(  # rotate at origin
+                                ((point[0]+align[0])*self.hflip,(point[1]+align[1])*self.vflip), self.rotation))
+                       for point in self.points]
+    
+    def _calc_points(self):
+        #align=self._get_align_vector()
+        
+        dTheta = self.angle/self.segments
+        pts = [(0,-self.height/2)]+[(self.rmin*math.sin((i+0.5)*dTheta),self.rmin*math.cos((i+0.5)*dTheta)-self.r0) for i in range(self.segments)]+[(self.rmin*math.sin(self.angle),self.rmin*math.cos(self.angle)-self.r0)]
+        pts = pts + [(self.rmax*math.sin(self.angle),self.rmax*math.cos(self.angle)-self.r0)] + [(self.rmax*math.sin(self.angle-(i+0.5)*dTheta),self.rmax*math.cos(self.angle-(i+0.5)*dTheta)-self.r0) for i in range(self.segments)] + [(0,self.rmax - self.r0)]
+        
+        
+        return pts
+    
+    def _build_polyline(self):
+        '''Build the polyline (key component)'''
+        polyline = Polyline(self.points, color=self.color, layer=self.layer,flags=0)
+        polyline.close() #redundant in most cases
+        if self.linetype is not None:
+            polyline['linetype'] = self.linetype
+        return polyline  
+    
+    def __dxf__(self):
+        ''' get the dxf string '''
+        return dxfstr(self.__dxftags__())
+    
+    def __dxftags__(self):
+        return self._build() 
     
 class RoundRect(SolidPline):
     ''' Rectangle with rounded edges. Consists of a closed polyline and multiple solids faces.
