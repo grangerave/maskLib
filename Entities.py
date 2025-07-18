@@ -359,8 +359,8 @@ class MiterJoint(SolidPline):
         #align=self._get_align_vector()
         
         dTheta = self.angle/self.segments
-        pts = [(0,-self.height/2)]+[(self.rmin*math.sin((i+0.5)*dTheta),self.rmin*math.cos((i+0.5)*dTheta)-self.r0) for i in range(self.segments)]+[(self.rmin*math.sin(self.angle),self.rmin*math.cos(self.angle)-self.r0)]
-        pts = pts + [(self.rmax*math.sin(self.angle),self.rmax*math.cos(self.angle)-self.r0)] + [(self.rmax*math.sin(self.angle-(i+0.5)*dTheta),self.rmax*math.cos(self.angle-(i+0.5)*dTheta)-self.r0) for i in range(self.segments)] + [(0,self.rmax - self.r0)]
+        pts = [(0,self.height),(0,0)]+[(self.r0*math.sin((i+1)*dTheta),self.r0*math.cos((i+1)*dTheta)-self.r0) for i in range(self.segments-1)]+[(self.r0*math.sin(self.angle),self.r0*math.cos(self.angle)-self.r0)]
+        pts = pts + [(self.height+self.r0-self.r0*math.cos(self.angle),self.height-self.r0*math.sin(self.angle))] + [(self.height+self.r0-self.r0*math.cos(self.angle-(i+1)*dTheta),self.height-self.r0*math.sin(self.angle-(i+1)*dTheta)) for i in range(self.segments-1)] + [(self.height,self.height)]
         
         
         return pts
